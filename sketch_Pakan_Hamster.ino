@@ -1,13 +1,12 @@
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
-
+#include <HX711.h>
 #include <Servo.h>
-
+#define DOUT  D6
+#define CLK  D7
+HX711 scale(DOUT, CLK);
 
 Servo myservo;
-#define DHTTYPE DHT11   
-
-const int ldr = A0;
 
 const char* ssid = "VIRUZ";
 const char* password = "08121996";
@@ -16,6 +15,9 @@ const char* mqtt_server = " 192.168.43.39";
 
 WiFiClient espClient;
 PubSubClient client(espClient);
+
+float calibration_factor = 142.20;
+int GRAM;
 
 const int trigPin = D1; 
 const int echoPin = D2;
@@ -32,13 +34,14 @@ int value = 0;
 void setup() {
   myservo.attach(D4);
   myservo.write(0);
-  Serial.begin(115200);
   setup_wifi();
   client.setServer(mqtt_server, 1883);
   client.setCallback(callback);
-  pinMode(trigPin, OUTPUT); // Sets the trigPin as an Output
-  pinMode(echoPin, INPUT); // Sets the echoPin as an Input
-Serial.begin(115200);
+  pinMode(trigPin, OUTPUT); 
+  pinMode(echoPin, INPUT); 
+  scale.set_scale();
+  scale.tare();
+  Serial.begin(115200);
 }
 void setup_wifi() {
   delay(10);
@@ -67,12 +70,12 @@ void setup_wifi() {
   Serial.println(string);
  
   if ((char)payload[0] == '1') {
-     Serial.println("ATAP TERBUKA");
-    myservo.write(90);
+     Serial.println("SERVO TERBUKA");
+    myservo.write(45);
   } 
  
  if ((char)payload[0] == '0') {
-    Serial.println("ATAP TERTUTUP");
+    Serial.println("SERVO TERTUTUP");
     myservo.write(0); 
   }
   Serial.println();
@@ -108,30 +111,37 @@ void loop() {
   now = millis();
   if (now - lastMeasure > 2000) {
     lastMeasure = now;
-   
-digitalWrite(trigPin, LOW);
-delayMicroseconds(2);
+  scale.set_scale(calibration_factor);
+  GRAM = scale.get_units(), 4;
+  Serial.println(GRAM);
+  
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
 
-digitalWrite(trigPin, HIGH);
-delayMicroseconds(10);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
 
-digitalWrite(trigPin, LOW);
-duration = pulseIn(echoPin, HIGH);
-distance= duration*0.034/2;
+  digitalWrite(trigPin, LOW);
+  duration = pulseIn(echoPin, HIGH);
+  distance= duration*0.034/2;
 
 
-//    if (isnan(dsitance) || isnan(berat)) {
- //     Serial.println("Failed to read from sensor!");
- //     return;
- //   }
+    if (isnan(dsitance) || isnan(berat)) {
+      Serial.println("Failed to read from sensor!");
+      return;
+    }
 
     static char ultra[7];
     dtostrf(distance, 6, 2, ultra);
-    
+    static char beban[7];
+    dtostrf(GRAM, 6, 2, beban);
+  
 
     client.publish("jarak", ultra);
+    client.publish("beban", beban);
 
-
+    Serial.print("Nilai Berat: ");
+    Serial.println(GRAM);
     Serial.print("Jarak : ");
     Serial.print(distance);
 
